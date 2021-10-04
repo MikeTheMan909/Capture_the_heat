@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<link rel="stylesheet" type="text/css" href="mystyle.css">
+		<link rel="icon" type="image/x-icon" href="favicon.ico" />
+		<script>
+		function onloadf(){
+		
+		
+		}
+		window.onload = function(){
+		document.getElementById("overview").classList.add('active');
+		function repeatedf(){
+		GetJson();
+		}
+		setInterval(repeatedf,5000);
+		}
+		</script>
+	</head>
+	
+	<body>
+		<div class="forum">
+			<div class="head">
+				<h1 class = "header1">Capture The Heat 5.0 - Sensor readings</h1>
+				<button id="about" class="last" onclick='mainbuttonchange("About")'>about</button>
+				<button id="config" onclick='mainbuttonchange("Config")'>Config</button>
+				<button id="overview" class="first" onclick='mainbuttonchange("Overview")'>Overview</button>
+				<hr>
+			</div>
+			<div id="datadiv" class="sensordatadiv">
+				<div class="Temperature_sensor">
+					<h3>DHT11 Sensor greenhouse:<h3>
+					<p id="Temperature_GH" class="sensordata">Temperature: </p>
+					<p id="Humidity_GH" class="sensordata">Humidity:</p>
+				</div>
+				<div class="Temperature_sensor">
+					<h3>DHT11 Sensor to dehumidifer:<h3>
+					<p id="Temperature_TH" class="sensordata">Temperature: </p>
+					<p id="Humidity_TH" class="sensordata">Humidity: </p>
+				</div>
+				<div class="Temperature_sensor">
+					<h3>DHT11 Sensor from dehumidifer:<h3>
+					<p id="Temperature_FH" class="sensordata">Temperature: </p>
+					<p id="Humidity_FH" class="sensordata">Humidity:</p>
+				</div>
+				<div class="Temperature_sensor">
+					<h3>Status:<h3>
+					<p id="CaseState" class="sensordata">Case: Dehumidifying</p>
+					<p id="MotorState" class="sensordata">Motor: On</p>
+					<p id="FanState" class="sensordata">Fan: On</p>
+				</div>
+				<div class="Temperature_sensor">
+					<h3>DS18B20 Top:<h3>
+					<p id="DS18B20_TOP" class="sensordata">Temperature: </p>
+				</div>
+				<div class="Temperature_sensor">
+					<h3>DS18B20 Bottom:<h3>
+					<p id="DS18B20_BOTTOM" class="sensordata">Temperature: </p>
+				</div>
+				<div class="Temperature_sensor">
+					<h3>Waterflow sensor:<h3>
+					<p id="waterflow" class="sensordata">waterflow: </p>
+				</div>				
+			</div>
+			
+			<div hidden id="aboutdiv" class="aboutdiv">
+				<div>
+					<h1>About</h1>
+					<p>Gemaakt door Quest studenten: Mike Oudshoorn, Coen steenbeek, Joost baron, Johan van Straalen, Marco Al Saadi, Mohamed Ibrahim.</p>
+					<a href="https://www.kubogroup.nl/nl">Kubo</a> <a href="https://www.hu.nl/">Hu</a> <a href="https://husite.nl/questprojecten/">Quest</a>
+				</div>
+			</div>
+			<div hidden id="configdiv" class="config">
+				
+				<form name="configform" id="test">
+				<h2>Config<h2>
+				  <label for="Spump">Set pump speed:</label><br>
+				  <input type="text" name="Spump" value="255"><br>
+				  <label for="Stemp">Set temperature:</label><br>
+				  <input type="text" name="Stemp" value="21"><br>
+				  <label for="Shumi">Set Humidity:</label><br>
+				  <input type="text" name="Shumi" value="50"><br>
+				  <label for="Stime">Set Read interval(ms):</label><br>
+				  <input type="text" name="Stime" value="50"><br>
+				  <input type="button" name="sumbit" onclick="push()" value="Apply">
+				</form>
+			</div>
+		</div>
+	</body>
+</html>
+<script>
+function GetJson(theUrl)
+{
+	const Http = new XMLHttpRequest();
+	Http.open("GET","/api/Stats");
+	Http.send();
+	
+	Http.onreadystatechange=function(){
+		if(this.readyState==4 && this.status==200){
+			const obj = JSON.parse(Http.responseText);
+			
+			if(obj.Temperature_GH != null){
+				document.getElementById("Temperature_GH").innerHTML = "Temperature: " + obj.Temperature_GH;
+				document.getElementById("Humidity_GH").innerHTML = "Humidity: " + obj.Humidity_GH;
+			} else {
+				document.getElementById("Temperature_GH").innerHTML = "Temperature: -";
+				document.getElementById("Humidity_GH").innerHTML = "Humidity: -";
+			}
+			if(obj.Temperature_TH != null){
+				document.getElementById("Temperature_TH").innerHTML = "Temperature: " + obj.Temperature_TH;
+				document.getElementById("Humidity_TH").innerHTML = "Humidity: " + obj.Humidity_TH;
+			} else {
+				document.getElementById("Temperature_TH").innerHTML = "Temperature: -";
+				document.getElementById("Humidity_TH").innerHTML = "Humidity: -";
+			}
+			if(obj.Temperature_FH != null){
+				document.getElementById("Temperature_FH").innerHTML = "Temperature: " + obj.Temperature_FH;
+				document.getElementById("Humidity_FH").innerHTML = "Humidity: " + obj.Humidity_FH;
+			} else{
+				document.getElementById("Temperature_FH").innerHTML = "Temperature: -";
+				document.getElementById("Humidity_FH").innerHTML = "Humidity: -";
+			}
+			if(obj.DS18B20_TOP == null || obj.DS18B20_TOP == 0){
+				document.getElementById("DS18B20_TOP").innerHTML = "Temperature: -";
+			} else{
+				document.getElementById("DS18B20_TOP").innerHTML = "Temperature: " + obj.DS18B20_TOP;
+			}
+			if(obj.DS18B20_BOTTOM == null || obj.DS18B20_BOTTOM == 0){
+				document.getElementById("DS18B20_BOTTOM").innerHTML = "Temperature: -";
+			} else{
+				document.getElementById("DS18B20_BOTTOM").innerHTML = "Temperature: " + obj.DS18B20_BOTTOM;
+			}
+		}
+	}
+}
+</script>
+<script>
+function mainbuttonchange(menu)
+{
+	switch(menu)
+	{
+		case "Overview":
+			document.getElementById("overview").classList.add('active');
+			document.getElementById("about").classList.remove('active');
+			document.getElementById("config").classList.remove('active');
+			pages("overview");
+			break;
+		case "About":
+			document.getElementById("about").classList.add('active');
+			document.getElementById("overview").classList.remove('active');
+			document.getElementById("config").classList.remove('active');
+			pages("about");
+			break;
+		case "Config":
+			document.getElementById("config").classList.add('active');
+			document.getElementById("about").classList.remove('active');
+			document.getElementById("overview").classList.remove('active');
+			pages("config");
+			break;
+	}
+}
+
+function pages(page){
+	var overview = document.getElementById("datadiv");
+	var about = document.getElementById("aboutdiv");
+	var config = document.getElementById("configdiv");
+	switch(page)
+	{
+		case "overview":
+			about.style.display = "none";
+			config.style.display = "none";
+			overview.style.display = "block";
+			break;
+		case "about":
+			config.style.display = "none";
+			overview.style.display = "none";
+			about.style.display = "block";
+			break;
+		case "config":
+			about.style.display = "none";
+			overview.style.display = "none";
+			config.style.display = "block";
+			break;
+	}
+}
+	const dataF = document.getElementById("test");
+function push(){
+	var datas = new FormData(configform)
+	data = {
+		Spump : datas.get("Spump"),
+		Stemp : datas.get("Stemp"),
+		Shumi : datas.get("Shumi"),
+		Stime : datas.get("Stime")
+	}
+	console.log(JSON.stringify(data));
+	const Http = new XMLHttpRequest();
+	Http.open("POST","/api/config");
+	Http.send(JSON.stringify(data));
+}
+</script>

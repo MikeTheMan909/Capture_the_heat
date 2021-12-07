@@ -272,7 +272,7 @@ void jsondata()
   Senddoc["DS18B20_BOTTOM"] = registerdata.DS18B20[1];
   Senddoc["case_state"] = registerdata.case_state;
   Senddoc["mqtt_connected"] = mqtt_con;
-}
+} //test command
 //Function: wifi_AP
 //Description: function to enable the system to work as an accespoint. 
 //ssid = "CTH_5"

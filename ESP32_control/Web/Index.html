@@ -4,12 +4,10 @@
 		<link rel="stylesheet" type="text/css" href="mystyle.css">
 		<link rel="icon" type="image/x-icon" href="favicon.ico" />
 		<script>
-		function onloadf(){
-		
-		
-		}
 		window.onload = function(){
 		document.getElementById("overview").classList.add('active');
+		GetConfig();
+		getwifissid();
 		function repeatedf(){
 		GetJson();
 		}
@@ -45,9 +43,9 @@
 				</div>
 				<div class="Temperature_sensor">
 					<h3>Status:<h3>
-					<p id="CaseState" class="sensordata">Case: Dehumidifying</p>
-					<p id="MotorState" class="sensordata">Motor: On</p>
-					<p id="FanState" class="sensordata">Fan: On</p>
+					<p id="CaseState" class="sensordata">Case:</p>
+					<p id="MotorState" class="sensordata">Motor:</p>
+					<p id="fanState" class="sensordata">Fan:</p>
 				</div>
 				<div class="Temperature_sensor">
 					<h3>DS18B20 Top:<h3>
@@ -61,6 +59,10 @@
 					<h3>Waterflow sensor:<h3>
 					<p id="waterflow" class="sensordata">waterflow: </p>
 				</div>				
+				<div class="Temperature_sensor">
+					<h3>Connection:<h3>
+					<p id="connectionstate" class="sensordata">Not Connected</p>
+				</div>		
 			</div>
 			
 			<div hidden id="aboutdiv" class="aboutdiv">
@@ -70,20 +72,52 @@
 					<a href="https://www.kubogroup.nl/nl">Kubo</a> <a href="https://www.hu.nl/">Hu</a> <a href="https://husite.nl/questprojecten/">Quest</a>
 				</div>
 			</div>
-			<div hidden id="configdiv" class="config">
+			<div hidden id="configdiv"> 
+				<div class="config">
+					<form name="configform">
+					  <h2>Config<h2>
+					  <label for="Spump">Set pump speed:</label><br>
+					  <input type="text" name="Spump" id="Sp"><br>
+					  <label for="Stemp">Set temperature:</label><br>
+					  <input type="text" name="Stemp" id="St"><br>
+					  <label for="Shumi">Set Humidity:</label><br>
+					  <input type="text" name="Shumi" id="Sh"><br>
+					  <label for="Stime">Set Read interval(ms):</label><br>
+					  <input type="text" name="Stime" id="Sti"><br>
+					</form>
+				</div>
 				
-				<form name="configform" id="test">
-				<h2>Config<h2>
-				  <label for="Spump">Set pump speed:</label><br>
-				  <input type="text" name="Spump" value="255"><br>
-				  <label for="Stemp">Set temperature:</label><br>
-				  <input type="text" name="Stemp" value="21"><br>
-				  <label for="Shumi">Set Humidity:</label><br>
-				  <input type="text" name="Shumi" value="50"><br>
-				  <label for="Stime">Set Read interval(ms):</label><br>
-				  <input type="text" name="Stime" value="50"><br>
-				  <input type="button" name="sumbit" onclick="push()" value="Apply">
-				</form>
+				<div class="config">
+					<form name="configwifi">
+					  <h2>Wifi settings<h2>
+					  <label for="wifi_ssid">Wifi ssid:</label><br>
+					  <select name="wifi_ssid" id="wifi_ssid">
+					  </select><br>
+					  <label for="wifi_pass">Wifi password:</label><br>
+					  <input type="text" name="wifi_pass" id="wifi_pass"><br>
+						
+					  
+					</form>
+				</div>
+				
+				<div class="config">
+					<form name="configmqtt">
+					  <h2>Mqtt settings<h2>
+					  <label for="mqtt_server">Mqtt server:</label><br>
+					  <input type="text" name="mqtt_server" id="mqtt_server"><br>
+					  <label for="mqtt_user">Mqtt user:</label><br>
+					  <input type="text" name="mqtt_user"><br>
+					  <label for="mqtt_pass">Mqtt password:</label><br>
+					  <input type="text" name="mqtt_pass"><br>
+					</form>
+				</div>
+				
+				<div class="config">
+					<form name="test">
+						<h2>Save Settings</h2>
+						<button type="button" name="sumbit" onclick="push()">Apply</button>
+					</form>
+				</div>
 			</div>
 		</div>
 	</body>
@@ -130,8 +164,128 @@ function GetJson(theUrl)
 			} else{
 				document.getElementById("DS18B20_BOTTOM").innerHTML = "Temperature: " + obj.DS18B20_BOTTOM;
 			}
+			if(obj.case_state == 1)
+			{
+					document.getElementById("CaseState").innerHTML = "Case: HEATING";
+					document.getElementById("MotorState").innerHTML = "Motor: off";
+					document.getElementById("fanState").innerHTML = "Fan: off";
+			}
+			if(obj.case_state == 2)
+			{
+					document.getElementById("CaseState").innerHTML = "Case: SPRAYING";
+					document.getElementById("MotorState").innerHTML = "Motor: off";
+					document.getElementById("fanState").innerHTML = "Fan: off";
+			}
+			if(obj.case_state == 3){
+					document.getElementById("CaseState").innerHTML = "Case: DEHUMIIFYING";
+					document.getElementById("MotorState").innerHTML = "Motor: on";
+					document.getElementById("fanState").innerHTML = "Fan: on";
+					}
+			if(obj.case_state == 4){
+					document.getElementById("CaseState").innerHTML = "Case: IDLE";
+					document.getElementById("MotorState").innerHTML = "Motor: off";
+					document.getElementById("fanState").innerHTML = "Fan: off";
+			}
+			if(obj.mqtt_connected == 1)
+			{
+				document.getElementById("connectionstate").innerHTML = "Mqtt Connected!";
+			}
 		}
 	}
+	
+}
+function GetConfig(){
+	const Http = new XMLHttpRequest();
+	Http.open("GET","/api/config");
+	Http.send();
+	
+	Http.onreadystatechange=function(){
+		if(this.readyState==4 && this.status==200){
+			const obj = JSON.parse(Http.responseText);
+			document.getElementById("Sp").value = obj.Spump;
+			document.getElementById("St").value = obj.Stemp;
+			document.getElementById("Sh").value = obj.Shumi;
+			document.getElementById("Sti").value = obj.Stime;
+			document.getElementById("wifi_ssid").value = obj.wifi_ssid;
+			document.getElementById("wifi_pass").value = obj.wifi_pass;
+			document.getElementById("mqtt_server").value = obj.mqtt_server;
+		}
+	}
+}
+function getwifissid(){
+	var x = document.getElementById("wifi_ssid");
+	var j,i;
+	for(j = 0; j <= x.length + 1; j++){
+		x.remove(x);
+	}
+	
+	const Http = new XMLHttpRequest();
+	Http.open("GET","/api/wifi");
+	Http.send();
+	Http.onreadystatechange=function(){
+		if(this.readyState==4 && this.status==200){
+			const obj = JSON.parse(Http.responseText);
+			if(obj.wifi_0 != null){
+			var opt = document.createElement("option");
+			opt.text = obj.wifi_0;
+			x.add(opt);
+			}if(obj.wifi_1 != null){
+			var opt1 = document.createElement("option");
+			opt1.text = obj.wifi_1;
+			x.add(opt1);
+			}if(obj.wifi_2 != null){
+			var opt2 = document.createElement("option");
+			opt2.text = obj.wifi_2;
+			x.add(opt2);
+			}if(obj.wifi_3 != null){
+			var opt3 = document.createElement("option");
+			opt3.text = obj.wifi_3;
+			x.add(opt3);
+			}if(obj.wifi_4 != null){
+			var opt4 = document.createElement("option");
+			opt4.text = obj.wifi_4;
+			x.add(opt4);
+			}if(obj.wifi_5 != null){
+			var opt5 = document.createElement("option");
+			opt5.text = obj.wifi_5;
+			x.add(opt5);
+			}if(obj.wifi_6 != null){
+			var opt6 = document.createElement("option");
+			opt6.text = obj.wifi_6;
+			x.add(opt6);
+			}if(obj.wifi_7 != null){
+			var opt7 = document.createElement("option");
+			opt7.text = obj.wifi_7;
+			x.add(opt7);
+			}if(obj.wifi_8 != null){
+			var opt8 = document.createElement("option");
+			opt8.text = obj.wifi_8;
+			x.add(opt8);
+			}if(obj.wifi_9 != null){
+			var opt9 = document.createElement("option");
+			opt9.text = obj.wifi_9;
+			x.add(opt9);
+			}if(obj.wifi_10 != null){
+			var opt10 = document.createElement("option");
+			opt10.text = obj.wifi_10;
+			x.add(opt10);
+			}if(obj.wifi_11 != null){
+			var opt11 = document.createElement("option");
+			opt11.text = obj.wifi_11;
+			x.add(opt11);
+			}if(obj.wifi_12 != null){
+			var opt12 = document.createElement("option");
+			opt12.text = obj.wifi_12;
+			x.add(opt12);
+			}if(obj.wifi_13 != null){
+			var opt13 = document.createElement("option");
+			opt13.text = obj.wifi_13;
+			x.add(opt13);
+			}
+			
+		}
+	}
+	
 }
 </script>
 <script>
@@ -184,13 +338,21 @@ function pages(page){
 	}
 }
 	const dataF = document.getElementById("test");
+	
 function push(){
-	var datas = new FormData(configform)
+	var config_gen = new FormData(configform)
+	var config_wifi = new FormData(configwifi)
+	var config_mqtt = new FormData(configmqtt)
 	data = {
-		Spump : datas.get("Spump"),
-		Stemp : datas.get("Stemp"),
-		Shumi : datas.get("Shumi"),
-		Stime : datas.get("Stime")
+		Spump : config_gen.get("Spump"),
+		Stemp : config_gen.get("Stemp"),
+		Shumi : config_gen.get("Shumi"),
+		Stime : config_gen.get("Stime"),
+		wifi_ssid : config_wifi.get("wifi_ssid"),
+		wifi_pass : config_wifi.get("wifi_pass"),
+		mqtt_server : config_mqtt.get("mqtt_server"),
+		mqtt_user : config_mqtt.get("mqtt_user"),
+		mqtt_pass : config_mqtt.get("mqtt_pass")
 	}
 	console.log(JSON.stringify(data));
 	const Http = new XMLHttpRequest();

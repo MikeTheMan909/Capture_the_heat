@@ -64,18 +64,10 @@ void printAddress(DeviceAddress deviceAddress);
 //Description: initializes the sensors. then check if ds18b20 is available.
 void sensor_setup();
 
-//Function: motor_setup
-//Description: sets up the output channel to send a pwm signal to the pump and fans.
-void motor_setup();
-
 //Function: setup_eeprom
 //Discription: init eeprom. checks if a config is already saved. if not save it. 
 //then read it from the eeprom and copy the buffer into the config struct.
 void setup_eeprom();
-
-//Function: MOTOR_CONTROL
-//Description: turns motor on or off. 
-void MOTOR_CONTROL(bool state);
 
 //Function: reconnect
 //Description: connect to the mqtt server.
@@ -272,7 +264,7 @@ void jsondata()
   Senddoc["DS18B20_BOTTOM"] = registerdata.DS18B20[1];
   Senddoc["case_state"] = registerdata.case_state;
   Senddoc["mqtt_connected"] = mqtt_con;
-} //test command
+} 
 //Function: wifi_AP
 //Description: function to enable the system to work as an accespoint. 
 //ssid = "CTH_5"

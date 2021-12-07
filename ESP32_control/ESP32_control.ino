@@ -104,12 +104,14 @@ unsigned long getTime();
 #define DHTTYPE DHT11
 #define ONE_WIRE_BUS 2
 #define TEMPERATURE_PRECISION 9 // Lower resolution
-#define RELAY_FAN 5
-#define MOTOR_EN_PIN 16
-#define MOTOR_IN1_PIN 7
-#define MOTOR_IN2_PIN 8
-#define motorchannel 0
-#define FAN_CONTROL(bool) digitalWrite(RELAY_FAN,bool);
+#define RELAY_FANIN 5
+#define RELAY_FANOUT 6
+#define RELAY_PUMP 7
+#define RELAY_SPRINKLE 8
+#define FANIN_CONTROL(bool) digitalWrite(RELAY_FANIN,bool);
+#define FANOUT_CONTROL(bool) digitalWrite(RELAY_FANOUT,bool);
+#define PUMP_CONTROL(bool) digitalWrite(RELAY_PUMP,bool);
+#define SPRINKLE_CONTROL(bool) digitalWrite(RELAY_SPRINKLE,bool);
 
 #define SCREEN_WIDTH 128 
 #define SCREEN_HEIGHT 64
@@ -190,7 +192,8 @@ struct sensordata {
 struct sensordata registerdata;
 struct Config c;
 
- unsigned char wifi1_icon16x16[] =
+//symbol for oled display
+unsigned char wifi1_icon16x16[] =
 {
   0b00000000, 0b00000000, //                 
   0b00000111, 0b11100000, //      ######     
@@ -209,6 +212,14 @@ struct Config c;
   0b00000000, 0b00000000, //                 
   0b00000000, 0b00000000, //                 
 };
+
+//Function: AH_calc
+//Description: calculates the absolute humidity.
+//args:
+//float RH_inside: relative humidity
+//float T_dry: temperature
+//return:
+//double x: absolute humidity.
 double AH_calc(float RH_inside, float T_dry){
   RH_inside = RH_inside/100;
   float u = 56.8191;
@@ -324,7 +335,9 @@ void wifi_setup()
     wifi_AP();
   }
 }
-
+//Function: wifi_scan
+//description: scans wifi networks nearby and stores them in a
+//json file, ready to be send to the user interface.
 void wifi_scan(){
   WiFi.disconnect(true);
   int n = WiFi.scanNetworks();
@@ -519,14 +532,6 @@ void sensor_setup()
   }
 }
 
-//Function: motor_setup
-//Description: sets up the output channel to send a pwm signal to the pump and fans.
-void motor_setup()
-{
-  sigmaDeltaSetup(motorchannel, 312500);
-  sigmaDeltaAttachPin(18,motorchannel);
-}
-
 //Function: setup_eeprom
 //Discription: init eeprom. checks if a config is already saved. if not save it. 
 //then read it from the eeprom and copy the buffer into the config struct.
@@ -589,24 +594,6 @@ float printTemperature(DeviceAddress deviceAddress)
   return tempC;
 }
 
-//Function: MOTOR_CONTROL
-//Description: turns motor on or off. 
-void MOTOR_CONTROL(bool state)
-{
-  if (state == true)
-  {
-    sigmaDeltaWrite(motorchannel, c.setpumpspeed);
-    ledcWrite(motorchannel, c.setpumpspeed);
-    digitalWrite(MOTOR_IN1_PIN, HIGH);
-    digitalWrite(MOTOR_IN2_PIN, LOW);
-  }
-  else
-  {
-    digitalWrite(MOTOR_IN1_PIN, LOW);
-    digitalWrite(MOTOR_IN2_PIN, LOW);
-  }
-}
-
 //Function: getTime
 //Description: gets time from a ntp server. returns the epoch time. print time the first time through the function.
 unsigned long getTime()
@@ -629,6 +616,13 @@ unsigned long getTime()
   return now;
 }
 
+
+//function: choose_state
+//desscription: uses AH_calc to calculate absolute humi. Then checks if measured temperature/humidity is within the tolerance.
+//if not then choose the state that needs to be used and return the state.
+//else go into idle.
+//return:
+//uint8_t number: returns a state. states are defined in uppersection of the code.
 uint8_t choose_state()
 {
   Absolute_humi = AH_calc(registerdata.DHT1.humi, registerdata.DHT1.temperature);
@@ -652,14 +646,20 @@ uint8_t choose_state()
     return DEHUMIFYING; //ontvocthigen
   }
   else 
-    return IDLE_CASE;
+    return IDLE_CASE; //go into idle mode
 }
 
+//function: turnoff
+//desctiption: turns motors ands fans off
 void turnoff()
 {
-  FAN_CONTROL(0);
-  MOTOR_CONTROL(0);
+  FANIN_CONTROL(0);
+  FANOUT_CONTROL(0);
+  PUMP_CONTROL(0);
+  SPRINKLE_CONTROL(0);
 }
+//function: start_display
+//description: initializes display and write text to screen.
 void start_display()
 {
   display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
@@ -675,27 +675,16 @@ void start_display()
   display.write("5.0");
   display.display();
 }
-void setup()
-{
-  start_display();
-  //sets serial
-  Serial.begin(115200);
-  setup_eeprom();
-  sensor_setup();
-  motor_setup();
-  wifi_scan();
-  wifi_setup();
-  server_setup();
-  server.begin();
-  configTime(7200, 0, c.ntpServer);
-  epochTime = getTime();
-  Serial.print("epoch Time:");
-  Serial.println(epochTime);
-  display1(registerdata.case_state);
-}
+//function: topbar
+//description: places wifi icon on the top off the screen.
 void topbar(){
   display.drawBitmap(128-16,0, wifi1_icon16x16, 16,16,1);
-  }
+  //if more symbols needs to be added
+  //HERE!
+}
+
+//function: display1
+//description: sets state number to text for display. Adds readings from sensors to the display.
 void display1(char state){
   char temp[20];
   display.clearDisplay();
@@ -720,6 +709,9 @@ void display1(char state){
   display.write(temp);
   display.display();
 }
+
+//function: printstate
+//description: sets state number to text for serial interface.
 void printstate(uint8_t state)
 {
   switch(state)
@@ -730,6 +722,25 @@ void printstate(uint8_t state)
     case 4: Serial.println("IDLE"); break;
   }
 }
+
+void setup()
+{
+  start_display();
+  //sets serial
+  Serial.begin(115200);
+  setup_eeprom();
+  sensor_setup();
+  wifi_scan();
+  wifi_setup();
+  server_setup();
+  server.begin();
+  configTime(7200, 0, c.ntpServer);
+  epochTime = getTime();
+  Serial.print("epoch Time:");
+  Serial.println(epochTime);
+  display1(registerdata.case_state);
+}
+
 void loop()
 {
   if(c.wifi_set == 1 && mqtt_con == 1) //if connected to an existing wifi than connect to a mqtt server.
@@ -740,17 +751,21 @@ void loop()
     }
     client.loop();
   }
-  //logic with temperature and humidity
-  //set pump/read sensor/control fans
+  
+  //
+  //
+  //set pump/read sensor/control fan !HERE!
+  //
+  //
   
   long now = millis();
-  if (now - lastMsg > c.readTime)
-  { //interval time between readings. can be set via the webinterface.
+  if (now - lastMsg > c.readTime)//interval time between readings. can be set via the webinterface.
+  { 
     lastMsg = now;
     if(c.wifi_set == 1)
     {
-    epochTime = getTime(); //gets current time if connected to wifi
-    Senddoc["Timestamp"] = epochTime;
+      epochTime = getTime(); //gets current time if connected to wifi
+      Senddoc["Timestamp"] = epochTime;
     }
 
     //reads the sensors and stores it in the sensordata struct
@@ -773,14 +788,15 @@ void loop()
 
     }
     if(c.wifi_set == 1 && mqtt_con == 1)
-    { //if connected to wifi then send a mqtt message
-    jsondata();
-    serializeJson(Senddoc, serializedjson);
-    client.publish("esp32/data", serializedjson);
+    { 
+      //if connected to wifi then send a mqtt message
+      jsondata();
+      serializeJson(Senddoc, serializedjson);
+      client.publish("esp32/data", serializedjson);
     }
+    
     if(RDY == 1)
     {
-      
       registerdata.case_state = choose_state();
       #ifdef DEBUG
       Serial.print("Current state: ");
@@ -792,8 +808,9 @@ void loop()
     switch(registerdata.case_state)
     {
       case DEHUMIFYING:
-       // FAN_CONTROL(1);
-       // MOTOR_CONTROL(1);
+        FANIN_CONTROL(1);
+        FANOUT_CONTROL(1);
+        PUMP_CONTROL(1);
         display1(DEHUMIFYING);
         if(registerdata.DHT1.humi <= c.setHumidity)
         {
@@ -805,7 +822,6 @@ void loop()
         }
         break;
       case HEATING:
-        //set lamp aan functie
         display1(HEATING);
         if(registerdata.DHT1.temperature >= c.settemperature)
         {
@@ -817,7 +833,7 @@ void loop()
         }
         break;
       case SPRAYING:
-        //pump sproeier
+        SPRINKLE_CONTROL(1);
         display1(SPRAYING);
         if(control_temperature == 1)
         {
@@ -844,11 +860,10 @@ void loop()
         break;
       case IDLE_CASE:
         display1(IDLE_CASE);
-        turnoff();
         break;
       default:
+        //never allowed!!
         break;
     }
-  
   }
 }

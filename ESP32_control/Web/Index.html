@@ -4,15 +4,15 @@
 		<link rel="stylesheet" type="text/css" href="mystyle.css">
 		<link rel="icon" type="image/x-icon" href="favicon.ico" />
 		<script>
-		window.onload = function(){
-		document.getElementById("overview").classList.add('active');
-		GetConfig();
-		getwifissid();
-		function repeatedf(){
-		GetJson();
-		}
-		setInterval(repeatedf,5000);
-		}
+			window.onload = function(){
+				document.getElementById("overview").classList.add('active');
+				GetConfig();
+				getwifissid();
+				function repeatedf(){
+					GetJson();
+				}
+				setInterval(repeatedf,5000);
+			}
 		</script>
 	</head>
 	
@@ -54,11 +54,7 @@
 				<div class="Temperature_sensor">
 					<h3>DS18B20 Bottom:<h3>
 					<p id="DS18B20_BOTTOM" class="sensordata">Temperature: </p>
-				</div>
-				<div class="Temperature_sensor">
-					<h3>Waterflow sensor:<h3>
-					<p id="waterflow" class="sensordata">waterflow: </p>
-				</div>				
+				</div>			
 				<div class="Temperature_sensor">
 					<h3>Connection:<h3>
 					<p id="connectionstate" class="sensordata">Not Connected</p>
@@ -74,11 +70,9 @@
 			</div>
 			<div hidden id="configdiv"> 
 				<div class="config">
+				<h2>Config</h2>
 					<form name="configform">
-					  <h2>Config<h2>
-					  <label for="Spump">Set pump speed:</label><br>
-					  <input type="text" name="Spump" id="Sp"><br>
-					  <label for="Stemp">Set temperature:</label><br>
+					  <label for="Stemp">Set temperature:</label>
 					  <input type="text" name="Stemp" id="St"><br>
 					  <label for="Shumi">Set Humidity:</label><br>
 					  <input type="text" name="Shumi" id="Sh"><br>
@@ -88,22 +82,20 @@
 				</div>
 				
 				<div class="config">
+				<h2>Wifi settings</h2>
 					<form name="configwifi">
-					  <h2>Wifi settings<h2>
 					  <label for="wifi_ssid">Wifi ssid:</label><br>
 					  <select name="wifi_ssid" id="wifi_ssid">
 					  </select><br>
 					  <label for="wifi_pass">Wifi password:</label><br>
 					  <input type="text" name="wifi_pass" id="wifi_pass"><br>
-						
-					  
 					</form>
 				</div>
 				
 				<div class="config">
+				<h2>Mqtt settings</h2>
 					<form name="configmqtt">
-					  <h2>Mqtt settings<h2>
-					  <label for="mqtt_server">Mqtt server:</label><br>
+					  <label for="mqtt_server">Mqtt server:</label>
 					  <input type="text" name="mqtt_server" id="mqtt_server"><br>
 					  <label for="mqtt_user">Mqtt user:</label><br>
 					  <input type="text" name="mqtt_user"><br>
@@ -113,10 +105,41 @@
 				</div>
 				
 				<div class="config">
+				<h2>Save Settings</h2>
 					<form name="test">
-						<h2>Save Settings</h2>
+						
 						<button type="button" name="sumbit" onclick="push()">Apply</button>
 					</form>
+				</div>
+				<br style="clear:both" />
+				<div class="config">
+					<h2>Manual override</h2>
+						<label class="switch" >
+						  <input type="checkbox" onclick="manual()" id="checkb">
+						  <span class="slider round"></span>
+						</label>
+					<div id="manual_show" style="display:none">
+						<p>Water pump</p>
+						<label class="switch" >
+						  <input type="checkbox" onclick="manual()" id="waterpump">
+						  <span class="slider round"></span>
+						</label>
+						<p>Spray pump</p>
+						<label class="switch" >
+						  <input type="checkbox" onclick="manual()" id="spraypump">
+						  <span class="slider round"></span>
+						</label>
+						<p>Fan in</p>
+						<label class="switch" >
+						  <input type="checkbox" onclick="manual()" id="fanin">
+						  <span class="slider round"></span>
+						</label>
+						<p>Fan out</p>
+						<label class="switch" >
+						  <input type="checkbox" onclick="manual()" id="fanout">
+						  <span class="slider round"></span>
+						</label>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -202,7 +225,6 @@ function GetConfig(){
 	Http.onreadystatechange=function(){
 		if(this.readyState==4 && this.status==200){
 			const obj = JSON.parse(Http.responseText);
-			document.getElementById("Sp").value = obj.Spump;
 			document.getElementById("St").value = obj.Stemp;
 			document.getElementById("Sh").value = obj.Shumi;
 			document.getElementById("Sti").value = obj.Stime;
@@ -344,7 +366,6 @@ function push(){
 	var config_wifi = new FormData(configwifi)
 	var config_mqtt = new FormData(configmqtt)
 	data = {
-		Spump : config_gen.get("Spump"),
 		Stemp : config_gen.get("Stemp"),
 		Shumi : config_gen.get("Shumi"),
 		Stime : config_gen.get("Stime"),
@@ -359,4 +380,31 @@ function push(){
 	Http.open("POST","/api/config");
 	Http.send(JSON.stringify(data));
 }
+function manual(){
+	var checkBox = document.getElementById("checkb");
+	var text = document.getElementById("manual_show");
+	if (checkBox.checked == true){
+		text.style.display = "block";
+	  } else {
+		text.style.display = "none";
+	  }
+	
+	var checkBoxwaterpump = document.getElementById("waterpump");
+	var checkBoxspraypump = document.getElementById("spraypump");
+	var checkBoxfanin = document.getElementById("fanin");
+	var checkBoxfanout = document.getElementById("fanout");
+	
+	data = {
+		manual : checkBox.checked,
+		pump : checkBoxwaterpump.checked,
+		pumpspray : checkBoxspraypump.checked,
+		fanin : checkBoxfanin.checked,
+		fanout : checkBoxfanout.checked
+	}
+	console.log(JSON.stringify(data));
+	const Http = new XMLHttpRequest();
+	Http.open("POST","/api/manual_override");
+	Http.send(JSON.stringify(data));
+}
+
 </script>

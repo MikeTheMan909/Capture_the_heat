@@ -254,11 +254,11 @@ void callback(char* topic, byte* message, unsigned int length)
 //Description: convert readings into a json file.
 void jsondata()
 {
-  Senddoc["Temperature_GH"] = registerdata.DHT1.temperature;
+  Senddoc["Temperature_GH"] = registerdata.DHT1.temperature; //GH Stands for GreenHouse
   Senddoc["Humidity_GH"] = registerdata.DHT1.humi;
-  Senddoc["Temperature_TH"] = registerdata.DHT2.temperature;
+  Senddoc["Temperature_TH"] = registerdata.DHT2.temperature; //TH stands for To House
   Senddoc["Humidity_TH"] = registerdata.DHT2.humi;
-  Senddoc["Temperature_FH"] = registerdata.DHT3.temperature;
+  Senddoc["Temperature_FH"] = registerdata.DHT3.temperature; //FH stands for From house
   Senddoc["Humidity_FH"] = registerdata.DHT3.humi;
   Senddoc["DS18B20_TOP"] = registerdata.DS18B20[0];
   Senddoc["DS18B20_BOTTOM"] = registerdata.DS18B20[1];
@@ -345,7 +345,7 @@ void wifi_scan(){
 }
 //Function: server_setup
 //Description: sets up callbacks for when a request is made.
-//if te request is not defined it will go to function notFound.
+//if the request is not defined it will go to function notFound.
 void server_setup()
 {
   server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest * request)

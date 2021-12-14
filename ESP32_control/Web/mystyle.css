@@ -99,6 +99,11 @@ body{
 .config input{
 	padding:0;
 }
+
+.manual{
+	display:none;
+}
+
 .mainbutton{
 	right: 100px;
 }

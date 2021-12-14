@@ -165,6 +165,13 @@ struct Config {
   long readTime = 4000;
 };
 
+struct manual{
+  bool manualctrl = 0;
+  bool pump = 0;
+  bool pumpspray = 0;
+  bool fanin = 0;
+  bool fanout = 0;
+};
 //struct for temperature data.
 struct dht11_data {
   float temperature = 21.3;
@@ -183,6 +190,7 @@ struct sensordata {
 //declaring structs
 struct sensordata registerdata;
 struct Config c;
+struct manual man;
 
 //symbol for oled display
 unsigned char wifi1_icon16x16[] =
@@ -202,6 +210,27 @@ unsigned char wifi1_icon16x16[] =
   0b00000001, 0b10000000, //        ##       
   0b00000000, 0b00000000, //                 
   0b00000000, 0b00000000, //                 
+  0b00000000, 0b00000000, //                 
+};
+
+//symbol for manual override
+unsigned char warning_icon16x16[] =
+{
+  0b00000000, 0b10000000, //         #       
+  0b00000001, 0b11000000, //        ###      
+  0b00000001, 0b11000000, //        ###      
+  0b00000011, 0b11100000, //       #####     
+  0b00000011, 0b01100000, //       ## ##     
+  0b00000111, 0b01110000, //      ### ###    
+  0b00000110, 0b00110000, //      ##   ##    
+  0b00001110, 0b10111000, //     ### # ###   
+  0b00001100, 0b10011000, //     ##  #  ##   
+  0b00011100, 0b10011100, //    ###  #  ###  
+  0b00011000, 0b10001100, //    ##   #   ##  
+  0b00111000, 0b00001110, //   ###       ### 
+  0b00110000, 0b10000110, //   ##    #    ## 
+  0b01111111, 0b11111111, //  ###############
+  0b01111111, 0b11111111, //  ###############
   0b00000000, 0b00000000, //                 
 };
 
@@ -471,6 +500,48 @@ void server_setup()
       ESP.restart();//reboot
     }
   });
+  
+  server.on("/api/manual_override", HTTP_POST, [](AsyncWebServerRequest * request)
+  {
+    String message;
+    if (isjson == 1)
+    {
+      message = "json found!";
+      isjson = 0;
+    }
+    else
+    {
+      message = "no json found!";
+    }
+    request->send(200, "text/plain", "Data received:" + message); //send a 200 reply that the data has been received.
+  }, NULL, [](AsyncWebServerRequest * request, uint8_t *data, size_t len, size_t index, size_t total)
+  { //here the processing will happen. the data will first be deserialized and the put in to a struct.
+    DeserializationError error;
+    if (!index)
+    {
+      // Deserialize the JSON document
+      error = deserializeJson(doc, (const char*)data);
+    }
+    // Test if parsing succeeds.
+    if (error)
+    {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.f_str());
+    }
+    else
+    {
+      man.manualctrl = doc["manual"];
+      man.pump = doc["pump"];
+      man.pumpspray = doc["pumpspray"];
+      man.fanin = doc["fanin"];
+      man.fanout = doc["fanout"];
+      if(man.manualctrl){Serial.println("Manual override activated");} else{Serial.println("Manual override deactivated");}
+      if(man.pump){Serial.println("pump activated");} else{Serial.println("pump deactivated");}
+      if(man.pumpspray){Serial.println("pump spray activated");} else{Serial.println("pump spray deactivated");}
+      if(man.fanin){Serial.println("fan in activated");} else{Serial.println("fan in deactivated");}
+      if(man.fanout){Serial.println("fan out activated");} else{Serial.println("fan out deactivated");}
+    }
+  });
   server.onNotFound(notFound);
 }
 
@@ -669,10 +740,16 @@ void start_display()
 }
 //function: topbar
 //description: places wifi icon on the top off the screen.
-void topbar(){
+void topbar()
+{
   display.drawBitmap(128-16,0, wifi1_icon16x16, 16,16,1);
   //if more symbols needs to be added
   //HERE!
+}
+
+void display_warning()
+{
+  display.drawBitmap(0,0, warning_icon16x16, 32, 32,1);
 }
 
 //function: display1
@@ -749,87 +826,63 @@ void loop()
   //set pump/read sensor/control fan !HERE!
   //
   //
-  
-  long now = millis();
-  if (now - lastMsg > c.readTime)//interval time between readings. can be set via the webinterface.
-  { 
-    lastMsg = now;
-    if(c.wifi_set == 1)
-    {
-      epochTime = getTime(); //gets current time if connected to wifi
-      Senddoc["Timestamp"] = epochTime;
-    }
-
-    //reads the sensors and stores it in the sensordata struct
-    registerdata.DHT1.temperature = dht1.readTemperature();
-    registerdata.DHT1.humi = dht1.readHumidity();
-    registerdata.DHT2.temperature = dht2.readTemperature();
-    registerdata.DHT2.humi = dht2.readHumidity();
-    registerdata.DHT3.temperature = dht3.readTemperature();
-    registerdata.DHT3.humi = dht3.readHumidity();
-    sensors.requestTemperatures(); // Send the command to get temperatures
-    for (int i = 0; i < numberOfDevices; i++)
-    {
-      // Search the wire for address
-      if (sensors.getAddress(tempDeviceAddress, i))
-      {
-        // Output the device ID
-        registerdata.DS18B20[i] = printTemperature(tempDeviceAddress); // Use a simple function to print out the data
-      }
-      //else ghost device! Check your power requirements and cabling
-
-    }
-    if(c.wifi_set == 1 && mqtt_con == 1)
+  if(man.manualctrl == 0)
+  {
+    long now = millis();
+    if (now - lastMsg > c.readTime)//interval time between readings. can be set via the webinterface.
     { 
-      //if connected to wifi then send a mqtt message
-      jsondata();
-      serializeJson(Senddoc, serializedjson);
-      client.publish("esp32/data", serializedjson);
-    }
-    
-    if(RDY == 1)
-    {
-      registerdata.case_state = choose_state();
-      #ifdef DEBUG
-      Serial.print("Current state: ");
-      printstate(registerdata.case_state);
-      turnoff();
-      #endif
-    }
-    
-    switch(registerdata.case_state)
-    {
-      case DEHUMIFYING:
-        FANIN_CONTROL(1);
-        FANOUT_CONTROL(1);
-        PUMP_CONTROL(1);
-        display1(DEHUMIFYING);
-        if(registerdata.DHT1.humi <= c.setHumidity)
+      lastMsg = now;
+      if(c.wifi_set == 1)
+      {
+        epochTime = getTime(); //gets current time if connected to wifi
+        Senddoc["Timestamp"] = epochTime;
+      }
+  
+      //reads the sensors and stores it in the sensordata struct
+      registerdata.DHT1.temperature = dht1.readTemperature();
+      registerdata.DHT1.humi = dht1.readHumidity();
+      registerdata.DHT2.temperature = dht2.readTemperature();
+      registerdata.DHT2.humi = dht2.readHumidity();
+      registerdata.DHT3.temperature = dht3.readTemperature();
+      registerdata.DHT3.humi = dht3.readHumidity();
+      sensors.requestTemperatures(); // Send the command to get temperatures
+      for (int i = 0; i < numberOfDevices; i++)
+      {
+        // Search the wire for address
+        if (sensors.getAddress(tempDeviceAddress, i))
         {
-          RDY = 1;
+          // Output the device ID
+          registerdata.DS18B20[i] = printTemperature(tempDeviceAddress); // Use a simple function to print out the data
         }
-        else
-        {
-          RDY = 0;
-        }
-        break;
-      case HEATING:
-        display1(HEATING);
-        if(registerdata.DHT1.temperature >= c.settemperature)
-        {
-          RDY = 1;
-        }
-        else
-        {
-          RDY = 0;
-        }
-        break;
-      case SPRAYING:
-        SPRINKLE_CONTROL(1);
-        display1(SPRAYING);
-        if(control_temperature == 1)
-        {
-          if(registerdata.DHT1.temperature <= c.settemperature)
+        //else ghost device! Check your power requirements and cabling
+  
+      }
+      if(c.wifi_set == 1 && mqtt_con == 1)
+      { 
+        //if connected to wifi then send a mqtt message
+        jsondata();
+        serializeJson(Senddoc, serializedjson);
+        client.publish("esp32/data", serializedjson);
+      }
+      
+      if(RDY == 1)
+      {
+        registerdata.case_state = choose_state();
+        #ifdef DEBUG
+        Serial.print("Current state: ");
+        printstate(registerdata.case_state);
+        turnoff();
+        #endif
+      }
+      
+      switch(registerdata.case_state)
+      {
+        case DEHUMIFYING:
+          FANIN_CONTROL(1);
+          FANOUT_CONTROL(1);
+          PUMP_CONTROL(1);
+          display1(DEHUMIFYING);
+          if(registerdata.DHT1.humi <= c.setHumidity)
           {
             RDY = 1;
           }
@@ -837,10 +890,10 @@ void loop()
           {
             RDY = 0;
           }
-        } 
-        else
-        {
-          if(registerdata.DHT1.humi >= c.setHumidity)
+          break;
+        case HEATING:
+          display1(HEATING);
+          if(registerdata.DHT1.temperature >= c.settemperature)
           {
             RDY = 1;
           }
@@ -848,14 +901,49 @@ void loop()
           {
             RDY = 0;
           }
-        }
-        break;
-      case IDLE_CASE:
-        display1(IDLE_CASE);
-        break;
-      default:
-        //never allowed!!
-        break;
+          break;
+        case SPRAYING:
+          SPRINKLE_CONTROL(1);
+          display1(SPRAYING);
+          if(control_temperature == 1)
+          {
+            if(registerdata.DHT1.temperature <= c.settemperature)
+            {
+              RDY = 1;
+            }
+            else
+            {
+              RDY = 0;
+            }
+          } 
+          else
+          {
+            if(registerdata.DHT1.humi >= c.setHumidity)
+            {
+              RDY = 1;
+            }
+            else
+            {
+              RDY = 0;
+            }
+          }
+          break;
+        case IDLE_CASE:
+          display1(IDLE_CASE);
+          break;
+        default:
+          //never allowed!!
+          break;
+      }
     }
+  }
+  else
+  {
+    display_warning();
+    display.write();
+    FANIN_CONTROL(man.fanin);
+    FANOUT_CONTROL(man.fanout);
+    PUMP_CONTROL(man.pump);
+    SPRINKLE_CONTROL(man.pumpspray);
   }
 }

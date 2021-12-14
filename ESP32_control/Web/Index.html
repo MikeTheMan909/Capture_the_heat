@@ -118,7 +118,7 @@
 						  <input type="checkbox" onclick="manual()" id="checkb">
 						  <span class="slider round"></span>
 						</label>
-					<div id="manual_show" style="display:none">
+					<div id="manual_show" class="manual">
 						<p>Water pump</p>
 						<label class="switch" >
 						  <input type="checkbox" onclick="manual()" id="waterpump">
@@ -382,18 +382,26 @@ function push(){
 }
 function manual(){
 	var checkBox = document.getElementById("checkb");
-	var text = document.getElementById("manual_show");
-	if (checkBox.checked == true){
-		text.style.display = "block";
-	  } else {
-		text.style.display = "none";
-	  }
-	
 	var checkBoxwaterpump = document.getElementById("waterpump");
 	var checkBoxspraypump = document.getElementById("spraypump");
 	var checkBoxfanin = document.getElementById("fanin");
 	var checkBoxfanout = document.getElementById("fanout");
-	
+	var text = document.getElementById("manual_show");
+	if (checkBox.checked == true){
+		text.style.visibility = "visible";
+		text.style.display = "block";
+	}
+	else
+	{
+		checkBoxwaterpump.checked = false;
+		checkBoxspraypump.checked = false;
+		checkBoxfanin.checked = false;
+		checkBoxfanout.checked = false;
+		text.style.visibility = "hidden";
+		setTimeout(function() {
+		text.style.display = "none";
+		}, 300);
+	}	
 	data = {
 		manual : checkBox.checked,
 		pump : checkBoxwaterpump.checked,

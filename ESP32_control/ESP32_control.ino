@@ -5,7 +5,7 @@
 #elif defined(ESP8266)
 #include <ESP8266WiFi.h>
 #include <ESPAsyncTCP.h>
-#endif
+#endif 
 #include <WiFiAP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -93,17 +93,17 @@ unsigned long getTime();
 #define DHTPIN2 5
 #define DHTPIN3 4
 #define DHTPIN4 18
-#define DHTTYPE DHT11
+#define DHTTYPE DHT22
 #define ONE_WIRE_BUS 2
 #define TEMPERATURE_PRECISION 9 // Lower resolution
-#define RELAY_FANIN 5
-#define RELAY_FANOUT 6
-#define RELAY_PUMP 7
-#define RELAY_SPRINKLE 8
-#define FANIN_CONTROL(bool) digitalWrite(RELAY_FANIN,bool);
-#define FANOUT_CONTROL(bool) digitalWrite(RELAY_FANOUT,bool);
-#define PUMP_CONTROL(bool) digitalWrite(RELAY_PUMP,bool);
-#define SPRINKLE_CONTROL(bool) digitalWrite(RELAY_SPRINKLE,bool);
+#define RELAY_FANIN 14
+#define RELAY_FANOUT 27
+#define RELAY_PUMP 26
+#define RELAY_SPRINKLE 25
+#define FANIN_CONTROL(bool) digitalWrite(RELAY_FANIN,!(bool));
+#define FANOUT_CONTROL(bool) digitalWrite(RELAY_FANOUT,!(bool));
+#define PUMP_CONTROL(bool) digitalWrite(RELAY_PUMP,!(bool));
+#define SPRINKLE_CONTROL(bool) digitalWrite(RELAY_SPRINKLE,!(bool));
 
 #define SCREEN_WIDTH 128 
 #define SCREEN_HEIGHT 64
@@ -114,7 +114,7 @@ unsigned long getTime();
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 DHT dht1(DHTPIN2, DHTTYPE);
 DHT dht2(DHTPIN3, DHTTYPE);
-DHT dht3(13, DHTTYPE);
+DHT dht3(DHTPIN4, DHTTYPE);
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 uint8_t numberOfDevices;
@@ -791,9 +791,46 @@ void printstate(uint8_t state)
     case 4: Serial.println("IDLE"); break;
   }
 }
+void read_sensor_data()
+{
+  registerdata.DHT1.temperature = dht1.readTemperature();
+  registerdata.DHT1.humi = dht1.readHumidity();
+  delay(250);
+  registerdata.DHT2.temperature = dht2.readTemperature();
+  registerdata.DHT2.humi = dht2.readHumidity();
+  delay(250);
+  registerdata.DHT3.temperature = dht3.readTemperature();
+  registerdata.DHT3.humi = dht3.readHumidity();
+  
+  Serial.print("temp:");
+  Serial.println(registerdata.DHT1.temperature);
+  Serial.print("temp:");
+  Serial.println(registerdata.DHT2.temperature);
+  Serial.print("temp:");
+  Serial.println(registerdata.DHT3.temperature);
+  
+  sensors.requestTemperatures(); // Send the command to get temperatures
+  for (int i = 0; i < numberOfDevices; i++)
+  {
+    // Search the wire for address
+    if (sensors.getAddress(tempDeviceAddress, i))
+    {
+      // Output the device ID
+      registerdata.DS18B20[i] = printTemperature(tempDeviceAddress); // Use a simple function to print out the data
+    }
+    //else ghost device! Check your power requirements and cabling
+  
+  }  
+}
 
 void setup()
 {
+  pinMode(RELAY_FANIN,OUTPUT);
+  pinMode(RELAY_FANOUT,OUTPUT);
+  pinMode(RELAY_PUMP,OUTPUT);
+  pinMode(RELAY_SPRINKLE,OUTPUT);
+  
+  turnoff();
   start_display();
   //sets serial
   Serial.begin(115200);
@@ -839,24 +876,7 @@ void loop()
       }
   
       //reads the sensors and stores it in the sensordata struct
-      registerdata.DHT1.temperature = dht1.readTemperature();
-      registerdata.DHT1.humi = dht1.readHumidity();
-      registerdata.DHT2.temperature = dht2.readTemperature();
-      registerdata.DHT2.humi = dht2.readHumidity();
-      registerdata.DHT3.temperature = dht3.readTemperature();
-      registerdata.DHT3.humi = dht3.readHumidity();
-      sensors.requestTemperatures(); // Send the command to get temperatures
-      for (int i = 0; i < numberOfDevices; i++)
-      {
-        // Search the wire for address
-        if (sensors.getAddress(tempDeviceAddress, i))
-        {
-          // Output the device ID
-          registerdata.DS18B20[i] = printTemperature(tempDeviceAddress); // Use a simple function to print out the data
-        }
-        //else ghost device! Check your power requirements and cabling
-  
-      }
+      read_sensor_data();
       if(c.wifi_set == 1 && mqtt_con == 1)
       { 
         //if connected to wifi then send a mqtt message
@@ -874,7 +894,7 @@ void loop()
         turnoff();
         #endif
       }
-      
+      registerdata.case_state = SPRAYING;
       switch(registerdata.case_state)
       {
         case DEHUMIFYING:
@@ -940,10 +960,15 @@ void loop()
   else
   {
     display_warning();
-    display.write();
+    display.display();
     FANIN_CONTROL(man.fanin);
     FANOUT_CONTROL(man.fanout);
     PUMP_CONTROL(man.pump);
     SPRINKLE_CONTROL(man.pumpspray);
+    if (now - lastMsg > c.readTime)//interval time between readings. can be set via the webinterface.
+    { 
+      lastMsg = now;
+      read_sensor_data();
+    }
   }
 }

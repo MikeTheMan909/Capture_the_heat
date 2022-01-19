@@ -9,7 +9,8 @@
 #include <WiFiAP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
-#include "DHT.h"
+//#include "DHT.h"
+#include <DHTesp.h>
 #include "WEB.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -20,10 +21,22 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Ticker.h>
+#include <HardwareSerial.h>
 
 #include <math.h>
 #include <stdio.h>
-//function definitions1
+
+TaskHandle_t tempTaskHandle = NULL;
+Ticker tempTicker;
+bool gotNewTemperature = false;
+TempAndHumidity sensor1Data;
+/** Data from sensor 2 */
+TempAndHumidity sensor2Data;
+/** Data from sensor 3 */
+TempAndHumidity sensor3Data;
+bool tasksEnabled = false;
+//function definitions
 
 //Function: notFound
 //Description: if http not found return 404
@@ -90,10 +103,6 @@ unsigned long getTime();
 #define IDLE_CASE 4
 
 //pinout define and sensor libraries defines
-#define DHTPIN2 5
-#define DHTPIN3 4
-#define DHTPIN4 18
-#define DHTTYPE DHT22
 #define ONE_WIRE_BUS 2
 #define TEMPERATURE_PRECISION 9 // Lower resolution
 #define RELAY_FANIN 14
@@ -112,14 +121,17 @@ unsigned long getTime();
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-DHT dht1(DHTPIN2, DHTTYPE);
-DHT dht2(DHTPIN3, DHTTYPE);
-DHT dht3(DHTPIN4, DHTTYPE);
+
+uint8_t cmd[] = {0x01,0x11,0x01,0x17,0x53};
+uint8_t data_buffer[50] = {0};
+DHTesp dht1;
+DHTesp dht2;
+DHTesp dht3;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 uint8_t numberOfDevices;
 DeviceAddress tempDeviceAddress; // We'll use this variable to store a found device address
-
+HardwareSerial MySerial(1);
 //eeprom handler
 Preferences eeprom;
 
@@ -173,16 +185,17 @@ struct manual{
   bool fanout = 0;
 };
 //struct for temperature data.
-struct dht11_data {
+struct dht22_data {
   float temperature = 21.3;
-  float humi = 33.2;
+  float humidity = 33.2;
 };
-
+union convert {
+  float f;
+  unsigned char b[4];
+};
 //struct for all sensordata combined.
 struct sensordata {
-  dht11_data DHT1;
-  dht11_data DHT2;
-  dht11_data DHT3;
+  dht22_data dht[3];
   float DS18B20[2];
   uint8_t case_state = 4;
 };
@@ -283,12 +296,12 @@ void callback(char* topic, byte* message, unsigned int length)
 //Description: convert readings into a json file.
 void jsondata()
 {
-  Senddoc["Temperature_GH"] = registerdata.DHT1.temperature; //GH Stands for GreenHouse
-  Senddoc["Humidity_GH"] = registerdata.DHT1.humi;
-  Senddoc["Temperature_TH"] = registerdata.DHT2.temperature; //TH stands for To House
-  Senddoc["Humidity_TH"] = registerdata.DHT2.humi;
-  Senddoc["Temperature_FH"] = registerdata.DHT3.temperature; //FH stands for From house
-  Senddoc["Humidity_FH"] = registerdata.DHT3.humi;
+  Senddoc["Temperature_GH"] = registerdata.dht[0].temperature; //GH Stands for GreenHouse
+  Senddoc["Humidity_GH"] = registerdata.dht[0].humidity;
+  Senddoc["Temperature_TH"] = registerdata.dht[1].temperature; //TH stands for To House
+  Senddoc["Humidity_TH"] = registerdata.dht[1].humidity;
+  Senddoc["Temperature_FH"] = registerdata.dht[2].temperature; //FH stands for From house
+  Senddoc["Humidity_FH"] = registerdata.dht[2].humidity;
   Senddoc["DS18B20_TOP"] = registerdata.DS18B20[0];
   Senddoc["DS18B20_BOTTOM"] = registerdata.DS18B20[1];
   Senddoc["case_state"] = registerdata.case_state;
@@ -302,7 +315,7 @@ void wifi_AP()
 {
   WiFi.mode(WIFI_AP);
   WiFi.softAP("CTH_5", "Testing1234");
-  delay(100);
+  delay(2000);
   IPAddress Ip(192, 168, 178, 1); //sets ip of the device
   IPAddress NMask(255, 255, 255, 0); //mask
   WiFi.softAPConfig(Ip, Ip, NMask);
@@ -356,6 +369,7 @@ void wifi_setup()
     wifi_AP();
   }
 }
+
 //Function: wifi_scan
 //description: scans wifi networks nearby and stores them in a
 //json file, ready to be send to the user interface.
@@ -559,10 +573,6 @@ void printAddress(DeviceAddress deviceAddress)
 //Description: initializes the sensors. then check if ds18b20 is available.
 void sensor_setup()
 {
-  dht1.begin();
-  dht2.begin();
-  dht3.begin();
-
   sensors.begin();
   numberOfDevices = sensors.getDeviceCount();
   for (int i = 0; i < numberOfDevices; i++)
@@ -688,23 +698,23 @@ unsigned long getTime()
 //uint8_t number: returns a state. states are defined in uppersection of the code.
 uint8_t choose_state()
 {
-  Absolute_humi = AH_calc(registerdata.DHT1.humi, registerdata.DHT1.temperature);
-  double SetAbsolute_humi = AH_calc(c.setHumidity, registerdata.DHT1.temperature);
-  if(registerdata.DHT1.temperature < c.settemperature && registerdata.DHT1.temperature < c.settemperature + 2)
+  Absolute_humi = AH_calc(registerdata.dht[0].humidity, registerdata.dht[0].temperature);
+  double SetAbsolute_humi = AH_calc(c.setHumidity, registerdata.dht[0].temperature);
+  if(registerdata.dht[0].temperature < c.settemperature && registerdata.dht[0].temperature < c.settemperature + 2)
   {
     return HEATING;  //verwarmen  
   }
-  else if(registerdata.DHT1.temperature > c.settemperature  && registerdata.DHT1.temperature < c.settemperature - 2)
+  else if(registerdata.dht[0].temperature > c.settemperature  && registerdata.dht[0].temperature < c.settemperature - 2)
   {
     control_temperature = 1;
     return SPRAYING; //sproeien
   }
-  else if(Absolute_humi < SetAbsolute_humi && Absolute_humi < AH_calc(c.setHumidity - 2, registerdata.DHT1.temperature))
+  else if(Absolute_humi < SetAbsolute_humi && Absolute_humi < AH_calc(c.setHumidity - 2, registerdata.dht[0].temperature))
   {
     control_temperature = 0;
     return SPRAYING; //sproeien
   }
-  else if(Absolute_humi > SetAbsolute_humi && Absolute_humi > AH_calc(c.setHumidity + 2, registerdata.DHT1.temperature))
+  else if(Absolute_humi > SetAbsolute_humi && Absolute_humi > AH_calc(c.setHumidity + 2, registerdata.dht[0].temperature))
   {
     return DEHUMIFYING; //ontvocthigen
   }
@@ -768,10 +778,10 @@ void display1(char state){
     case 4: display.write("Case: IDLE\n");; break;
   }
   display.write("Greenhouse TEMP: ");
-  sprintf(temp, "%.1f", registerdata.DHT1.temperature);
+  sprintf(temp, "%.1f", registerdata.dht[0].temperature);
   display.write(temp);
   display.write("\nGreenhouse HUMI: ");
-  sprintf(temp, "%.1f", registerdata.DHT1.humi);
+  sprintf(temp, "%.1f", registerdata.dht[0].humidity);
   display.write(temp);
   display.write("\nGreenhouse AH: ");
   sprintf(temp, "%.4f", Absolute_humi);
@@ -793,24 +803,39 @@ void printstate(uint8_t state)
 }
 void read_sensor_data()
 {
-  registerdata.DHT1.temperature = dht1.readTemperature();
-  registerdata.DHT1.humi = dht1.readHumidity();
-  delay(250);
-  registerdata.DHT2.temperature = dht2.readTemperature();
-  registerdata.DHT2.humi = dht2.readHumidity();
-  delay(250);
-  registerdata.DHT3.temperature = dht3.readTemperature();
-  registerdata.DHT3.humi = dht3.readHumidity();
-  
-  Serial.print("temp:");
-  Serial.println(registerdata.DHT1.temperature);
-  Serial.print("temp:");
-  Serial.println(registerdata.DHT2.temperature);
-  Serial.print("temp:");
-  Serial.println(registerdata.DHT3.temperature);
-  
+  char tmp[16];
+  int i = 0;
+  int k;
+  bool new_data = false;
+  union convert c;
+  for(int i =0; i< 5; i++){
+    MySerial.write(cmd[i]);
+  }
+  delay(100);
+  while(MySerial.available()){
+      data_buffer[i] = MySerial.read();
+      i++;
+      new_data = true;
+  }
+  if(new_data)
+  {
+    new_data == false;
+    for (i = 0; i < 3; i++) {
+      for (k = 0; k < sizeof(c.b); k++) {
+        c.b[k] = data_buffer[(4 * i) + k + 4];
+      }
+      registerdata.dht[i].humidity = c.f;
+    }
+    
+    for (i = 0; i < 3; i++) {
+      for (k = 0; k < sizeof(c.b); k++) {
+        c.b[k] = data_buffer[(4 * i) + k + 16]; 
+      }
+      registerdata.dht[i].temperature = c.f;
+    }
+  }
   sensors.requestTemperatures(); // Send the command to get temperatures
-  for (int i = 0; i < numberOfDevices; i++)
+  for (i = 0; i < numberOfDevices; i++)
   {
     // Search the wire for address
     if (sensors.getAddress(tempDeviceAddress, i))
@@ -834,6 +859,7 @@ void setup()
   start_display();
   //sets serial
   Serial.begin(115200);
+  MySerial.begin(115200, SERIAL_8N1, 16, 17);
   setup_eeprom();
   sensor_setup();
   wifi_scan();
@@ -863,9 +889,10 @@ void loop()
   //set pump/read sensor/control fan !HERE!
   //
   //
+  long now = millis();
   if(man.manualctrl == 0)
   {
-    long now = millis();
+    
     if (now - lastMsg > c.readTime)//interval time between readings. can be set via the webinterface.
     { 
       lastMsg = now;
@@ -894,7 +921,6 @@ void loop()
         turnoff();
         #endif
       }
-      registerdata.case_state = SPRAYING;
       switch(registerdata.case_state)
       {
         case DEHUMIFYING:
@@ -902,7 +928,7 @@ void loop()
           FANOUT_CONTROL(1);
           PUMP_CONTROL(1);
           display1(DEHUMIFYING);
-          if(registerdata.DHT1.humi <= c.setHumidity)
+          if(registerdata.dht[0].humidity <= c.setHumidity)
           {
             RDY = 1;
           }
@@ -913,7 +939,7 @@ void loop()
           break;
         case HEATING:
           display1(HEATING);
-          if(registerdata.DHT1.temperature >= c.settemperature)
+          if(registerdata.dht[0].temperature >= c.settemperature+2)
           {
             RDY = 1;
           }
@@ -927,7 +953,7 @@ void loop()
           display1(SPRAYING);
           if(control_temperature == 1)
           {
-            if(registerdata.DHT1.temperature <= c.settemperature)
+            if(registerdata.dht[0].temperature <= c.settemperature)
             {
               RDY = 1;
             }
@@ -938,7 +964,7 @@ void loop()
           } 
           else
           {
-            if(registerdata.DHT1.humi >= c.setHumidity)
+            if(registerdata.dht[0].humidity >= c.setHumidity)
             {
               RDY = 1;
             }
